@@ -108,9 +108,7 @@ async def example_list_messages():
     }
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{API_BASE_URL}/genie/conversation/{conversation_id}/messages", headers=headers
-        )
+        response = await client.get(f"{API_BASE_URL}/genie/conversation/{conversation_id}/messages", headers=headers)
 
         if response.status_code == 200:
             messages = response.json()

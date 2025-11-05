@@ -65,9 +65,7 @@ class GenieClient:
             logger.error(f"Error creating conversation: {e}")
             return None
 
-    def create_message(
-        self, space_id: str, conversation_id: str, content: str
-    ) -> GenieMessage | None:
+    def create_message(self, space_id: str, conversation_id: str, content: str) -> GenieMessage | None:
         """Create a message in a Genie conversation.
 
         Args:

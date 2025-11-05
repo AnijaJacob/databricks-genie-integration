@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import Depends, FastAPI, HTTPException, Header
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from src.api.genie_client import GenieClient
