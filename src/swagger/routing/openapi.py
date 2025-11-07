@@ -4,24 +4,20 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
 
-def create_swagger_ui_oauth_params(client_id: str, redirect_url: str = None) -> dict:
+def create_swagger_ui_oauth_params(client_id: str) -> dict:
     """Create OAuth parameters for Swagger UI.
 
     Args:
         client_id: Azure AD client ID
-        redirect_url: Optional OAuth2 redirect URL
 
     Returns:
         Dictionary with OAuth parameters for Swagger UI
     """
-    params = {
+    return {
         "clientId": client_id,
         "usePkceWithAuthorizationCodeGrant": True,
         "scopes": [f"{client_id}/.default"],
     }
-    if redirect_url:
-        params["redirectUrl"] = redirect_url
-    return params
 
 
 def set_azure_ad_openapi(

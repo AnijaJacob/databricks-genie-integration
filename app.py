@@ -63,9 +63,7 @@ async def custom_swagger_ui_html() -> HTMLResponse:
         openapi_url=app.openapi_url or "/openapi.json",
         title=app.title,
         oauth2_redirect_url="/docs/oauth2-redirect",
-        init_oauth=create_swagger_ui_oauth_params(
-            config.client_id, redirect_url="http://localhost:8000/docs/oauth2-redirect"
-        ),
+        init_oauth=create_swagger_ui_oauth_params(config.client_id),
     )
 
 
