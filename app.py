@@ -2,12 +2,17 @@
 
 import logging
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
+from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from src.api.genie_client import GenieClient
 from src.auth.msal_auth import AppToAppAuth, OBOAuth
 from src.models.config import Config
+from src.swagger.routing.openapi import create_swagger_ui_oauth_params, set_azure_ad_openapi
+from src.swagger.routing.swagger_ui import get_swagger_ui_html
 
 # Configure logging
 logging.basicConfig(
@@ -21,15 +26,27 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Load configuration
+config = Config()
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Databricks Genie Integration",
     description="API for interacting with Databricks Genie using OBO and App-to-App authentication",
     version="0.1.0",
+    docs_url=None,  # Disable default docs to use custom OAuth
+    redoc_url=None,
 )
 
-# Load configuration
-config = Config()
+# Configure Azure AD OAuth for OpenAPI
+set_azure_ad_openapi(
+    app=app,
+    client_id=config.client_id,
+    tenant_id=config.tenant_id,
+)
+
+# Security scheme for Swagger UI
+security = HTTPBearer()
 
 
 class QueryRequest(BaseModel):
@@ -37,6 +54,25 @@ class QueryRequest(BaseModel):
 
     query: str
     conversation_id: str | None = None
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html() -> HTMLResponse:
+    """Custom Swagger UI with Azure AD OAuth2."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=app.title,
+        oauth2_redirect_url="/docs/oauth2-redirect",
+        init_oauth=create_swagger_ui_oauth_params(
+            config.client_id, redirect_url="http://localhost:8000/docs/oauth2-redirect"
+        ),
+    )
+
+
+@app.get("/docs/oauth2-redirect", include_in_schema=False)
+async def swagger_ui_redirect() -> HTMLResponse:
+    """OAuth2 redirect endpoint for Swagger UI."""
+    return get_swagger_ui_oauth2_redirect_html()
 
 
 @app.get("/health")
@@ -48,7 +84,7 @@ async def health():
 @app.post("/genie/query-obo")
 async def query_genie_obo(
     request: QueryRequest,
-    authorization: str = Header(..., description="Bearer token from user"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """Query Genie using On-Behalf-Of (OBO) flow.
 
@@ -60,11 +96,8 @@ async def query_genie_obo(
         Query result from Genie
     """
     try:
-        # Extract token from Authorization header
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-
-        user_token = authorization.replace("Bearer ", "")
+        # Get token from credentials
+        user_token = credentials.credentials
 
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
@@ -148,7 +181,7 @@ async def query_genie_app(request: QueryRequest):
 @app.get("/genie/conversation/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
-    authorization: str = Header(..., description="Bearer token from user"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """Get conversation details using OBO flow.
 
@@ -160,11 +193,8 @@ async def get_conversation(
         Conversation details
     """
     try:
-        # Extract token
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-
-        user_token = authorization.replace("Bearer ", "")
+        # Get token from credentials
+        user_token = credentials.credentials
 
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
@@ -199,7 +229,7 @@ async def get_conversation(
 @app.get("/genie/conversation/{conversation_id}/messages")
 async def list_messages(
     conversation_id: str,
-    authorization: str = Header(..., description="Bearer token from user"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """List messages in a conversation using OBO flow.
 
@@ -211,11 +241,8 @@ async def list_messages(
         List of messages
     """
     try:
-        # Extract token
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-
-        user_token = authorization.replace("Bearer ", "")
+        # Get token from credentials
+        user_token = credentials.credentials
 
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
