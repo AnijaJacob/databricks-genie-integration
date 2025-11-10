@@ -18,8 +18,9 @@ def create_swagger_ui_oauth_params(client_id: str) -> dict:
         "clientId": client_id,
         "usePkceWithAuthorizationCodeGrant": True,
         "useBasicAuthenticationWithAccessCodeGrant": True,
-        "scopes": ["2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation"],
-        "additionalQueryStringParams": {"prompt": "consent"},
+        # "scopes": ["2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation"],
+        # "additionalQueryStringParams": {"prompt": "consent"},
+        "scopes": [f"api://{client_id}/.default"],
     }
 
 
@@ -82,8 +83,11 @@ def set_azure_ad_openapi(app: FastAPI, client_id: str | None, tenant_id: str | N
                         "authorizationCode": {
                             "authorizationUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize",
                             "tokenUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+                            # "scopes": {
+                            #     "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation": "Access Databricks",
+                            # },
                             "scopes": {
-                                "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation": "Access Databricks",
+                                f"api://{client_id}/.default": "Default scopes",
                             },
                         }
                     },
