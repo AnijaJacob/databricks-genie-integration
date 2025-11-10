@@ -42,7 +42,7 @@ class OBOAuth:
             Token response containing access_token or None if failed
         """
         scopes = [f"{self.databricks_resource_id}/user_impersonation"]
-
+        # scopes = ["api://c5122c31-6ad8-4783-ad40-63001d8fb632/insights_copilot"]
         try:
             result = self.app.acquire_token_on_behalf_of(
                 user_assertion=user_token,
@@ -50,7 +50,7 @@ class OBOAuth:
             )
 
             if "access_token" in result:
-                logger.info("Successfully acquired OBO token", result)
+                logger.info(f"Successfully acquired OBO token{result}")
                 return result
             else:
                 logger.error(f"Failed to acquire OBO token: {result.get('error_description')}")

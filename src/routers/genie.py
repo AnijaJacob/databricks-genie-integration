@@ -1,6 +1,7 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.auth.dependencies import get_access_token
 from src.auth.msal_auth import AppToAppAuth, OBOAuth
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 config = Config()
+security = HTTPBearer(auto_error=False)
 
 
 @router.post("/query-obo")
@@ -106,6 +108,44 @@ async def query_genie_app(request: QueryRequest):
         raise
     except Exception as e:
         logger.error(f"Error in app-to-app query: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/query-pat")
+async def query_genie_pat(
+    query_request: QueryRequest,
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
+):
+    """Query Genie using PAT flow.
+
+    Args:
+        request: Query request containing query text and optional conversation_id
+        credentials: Databricks PAT token
+
+    Returns:
+        Query result from Genie
+    """
+    try:
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Missing Authorization header with PAT token")
+
+        databricks_token = credentials.credentials
+        # Query Genie
+        with GenieClient(config.genie_workspace_url, databricks_token) as genie:
+            result = genie.query_genie(
+                space_id=config.genie_space_id,
+                query=query_request.query,
+            )
+
+            if "error" in result:
+                raise HTTPException(status_code=500, detail=result["error"])
+
+            return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in OBO query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

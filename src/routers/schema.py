@@ -5,4 +5,3 @@ class QueryRequest(BaseModel):
     """Request model for Genie query."""
 
     query: str
-    conversation_id: str | None = None

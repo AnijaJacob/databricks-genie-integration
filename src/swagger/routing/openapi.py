@@ -15,13 +15,11 @@ def create_swagger_ui_oauth_params(client_id: str) -> dict:
         Dictionary with OAuth parameters for Swagger UI
     """
     return {
-        # "clientId": client_id,
-        # "usePkceWithAuthorizationCodeGrant": True,
-        # "scopes": [f"api://{client_id}/access_as_user"],
         "clientId": client_id,
         "usePkceWithAuthorizationCodeGrant": True,
         "useBasicAuthenticationWithAccessCodeGrant": True,
-        "scopes": [f"{client_id}/.default"],
+        "scopes": ["2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation"],
+        "additionalQueryStringParams": {"prompt": "consent"},
     }
 
 
@@ -46,22 +44,34 @@ def set_azure_ad_openapi(app: FastAPI, client_id: str | None, tenant_id: str | N
             routes=app.routes,
         )
 
-        # Clean up authorization parameters from routes
+        # Clean up authorization parameters from routes and handle per-endpoint security
         paths = openapi_schema.get("paths", {})
         http_methods = ["get", "post", "patch", "delete", "put"]
 
         for path in paths:
             for http_method in http_methods:
-                if http_method not in paths[path] or "parameters" not in paths[path][http_method]:
+                if http_method not in paths[path]:
                     continue
 
-                parameters: list[dict] = paths[path][http_method]["parameters"]
-                openapi_schema["paths"][path][http_method]["parameters"] = list(
-                    filter(
-                        lambda param: param["name"].lower() != "authorization" or param["in"].lower() != "header",
-                        parameters,
+                endpoint = paths[path][http_method]
+
+                # Clean up authorization parameters
+                if "parameters" in endpoint:
+                    parameters: list[dict] = endpoint["parameters"]
+                    endpoint["parameters"] = list(
+                        filter(
+                            lambda param: param["name"].lower() != "authorization" or param["in"].lower() != "header",
+                            parameters,
+                        )
                     )
-                )
+
+                # Handle per-endpoint security overrides
+                if "security" in endpoint:
+                    # Endpoint has explicit security config, keep it as-is
+                    pass
+                elif client_id and tenant_id:
+                    # Apply default OAuth security
+                    endpoint["security"] = [{"AzureOAuth": []}]
 
         if client_id and tenant_id:
             # Configure Azure AD OAuth security scheme with authorization code flow + PKCE
@@ -73,18 +83,17 @@ def set_azure_ad_openapi(app: FastAPI, client_id: str | None, tenant_id: str | N
                             "authorizationUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize",
                             "tokenUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
                             "scopes": {
-                                # f"api://{client_id}/access_as_user": "Access API as user",
-                                f"{client_id}/.default": "Default scopes",
+                                "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/user_impersonation": "Access Databricks",
                             },
                         }
                     },
                 },
+                "HTTPBearer": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "description": "Databricks Personal Access Token (PAT)",
+                },
             }
-
-            # Apply security requirement globally
-            openapi_schema["security"] = [
-                {"AzureOAuth": []},
-            ]
 
         app.openapi_schema = openapi_schema
         return app.openapi_schema
