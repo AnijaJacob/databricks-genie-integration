@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from src.auth.dependencies import get_access_token
 from src.auth.msal_auth import AppToAppAuth, OBOAuth
 from src.models.config import Config
-from src.routers.schema import QueryRequest
+from src.routers.schema import FollowupRequest, QueryRequest
 from src.services.genie_client import GenieClient
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ config = Config()
 security = HTTPBearer(auto_error=False)
 
 
-@router.post("/query-obo")
+@router.post("/new-conversation/obo")
 async def query_genie_obo(
     query_request: QueryRequest,
     access_token: str = Depends(get_access_token),
@@ -66,7 +66,7 @@ async def query_genie_obo(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/query-app")
+@router.post("/new-conversation/app")
 async def query_genie_app(request: QueryRequest):
     """Query Genie using App-to-App (client credentials) flow.
 
@@ -111,7 +111,7 @@ async def query_genie_app(request: QueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/query-pat")
+@router.post("/new-conversation/pat")
 async def query_genie_pat(
     query_request: QueryRequest,
     credentials: HTTPAuthorizationCredentials | None = Security(security),
@@ -149,84 +149,71 @@ async def query_genie_pat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/conversation/{conversation_id}")
-async def get_conversation(
-    conversation_id: str,
-    access_token: str = Depends(get_access_token),
+@router.post("/message")
+async def create_followup(
+    query_request: FollowupRequest,
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
 ):
-    """Get conversation details using OBO flow.
+    """Query Genie using PAT flow.
 
     Args:
-        conversation_id: Conversation ID
-        authorization: User's bearer token
+        request: Query request containing query text and optional conversation_id
+        credentials: Databricks PAT token
 
     Returns:
-        Conversation details
+        Query result from Genie
     """
     try:
-        # Acquire Databricks token using OBO
-        obo_auth = OBOAuth(
-            tenant_id=config.tenant_id,
-            client_id=config.client_id,
-            client_secret=config.client_secret,
-            databricks_resource_id=config.databricks_resource_id,
-        )
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Missing Authorization header with PAT token")
 
-        token_result = obo_auth.acquire_token_on_behalf_of(access_token)
-        if not token_result or "access_token" not in token_result:
-            raise HTTPException(status_code=401, detail="Failed to acquire Databricks token")
-
-        databricks_token = token_result["access_token"]
-
-        # Get conversation
+        databricks_token = credentials.credentials
+        # Query Genie
         with GenieClient(config.genie_workspace_url, databricks_token) as genie:
-            conversation = genie.get_conversation(config.genie_space_id, conversation_id)
+            result = genie.create_message(
+                space_id=config.genie_space_id,
+                content=query_request.query,
+                conversation_id=query_request.conversation_id,
+            )
 
-            if not conversation:
-                raise HTTPException(status_code=404, detail="Conversation not found")
+            if "error" in result:
+                raise HTTPException(status_code=500, detail=result["error"])
 
-            return conversation.model_dump()
+            return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting conversation: {e}")
+        logger.error(f"Error in OBO query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/conversation/{conversation_id}/messages")
-async def list_messages(
+@router.get("/conversation/{conversation_id}/messages/{message_id}")
+async def get_message(
     conversation_id: str,
-    access_token: str = Depends(get_access_token),
+    message_id: str,
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
 ):
     """List messages in a conversation using OBO flow.
 
     Args:
         conversation_id: Conversation ID
+        message_id: Message ID
         authorization: User's bearer token
 
     Returns:
         List of messages
     """
     try:
-        # Acquire Databricks token using OBO
-        obo_auth = OBOAuth(
-            tenant_id=config.tenant_id,
-            client_id=config.client_id,
-            client_secret=config.client_secret,
-            databricks_resource_id=config.databricks_resource_id,
-        )
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Missing Authorization header with PAT token")
 
-        token_result = obo_auth.acquire_token_on_behalf_of(access_token)
-        if not token_result or "access_token" not in token_result:
-            raise HTTPException(status_code=401, detail="Failed to acquire Databricks token")
-
-        databricks_token = token_result["access_token"]
+        databricks_token = credentials.credentials
 
         # List messages
         with GenieClient(config.genie_workspace_url, databricks_token) as genie:
-            messages = genie.list_messages(config.genie_space_id, conversation_id)
-            return {"messages": [msg.model_dump() for msg in messages]}
+            message = genie.get_message(config.genie_space_id, conversation_id, message_id)
+            return message
 
     except HTTPException:
         raise

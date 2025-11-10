@@ -56,8 +56,8 @@ class GenieClient:
             response = self.client.post(url, json=payload.model_dump())
             response.raise_for_status()
             data = response.json()
-            logger.info(f"Created conversation: {data.conversation_id}")
-            return GenieConversation(**data.conversation)
+            logger.info(f"Created conversation: {data.get('conversation_id')}")
+            return GenieConversation(**data.get("conversation", data))
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error creating conversation: {e.response.status_code} - {e.response.text}")
@@ -96,7 +96,9 @@ class GenieClient:
 
     def get_message(self, space_id: str, conversation_id: str, message_id: str) -> GenieMessage | None:
         """Get a message from a Genie conversation.
-
+        GET /api/2.0/genie/spaces/{space_id}/conversations/{conversation_id}/messages/{message_id}
+        HOST= <DATABRICKS_INSTANCE>
+        Authorization: Bearer <your_authentication_token>
         Args:
             space_id: Genie space ID
             conversation_id: Conversation ID
@@ -111,6 +113,7 @@ class GenieClient:
             response = self.client.get(url)
             response.raise_for_status()
             data = response.json()
+            logger.info(f"Retrieved message: {data.get('id')}")
             return GenieMessage(**data)
 
         except httpx.HTTPStatusError as e:
@@ -120,57 +123,31 @@ class GenieClient:
             logger.error(f"Error getting message: {e}")
             return None
 
-    # def list_messages(self, space_id: str, conversation_id: str) -> list[GenieMessage]:
-    #     """List all messages in a Genie conversation.
+    def get_conversation(self, space_id: str, conversation_id: str) -> GenieConversation | None:
+        """Get a Genie conversation.
 
-    #     Args:
-    #         space_id: Genie space ID
-    #         conversation_id: Conversation ID
 
-    #     Returns:
-    #         List of GenieMessage objects
-    #     """
-    #     url = f"{self.base_url}/spaces/{space_id}/conversations/{conversation_id}/messages"
+        Args:
+            space_id: Genie space ID
+            conversation_id: Conversation ID
 
-    #     try:
-    #         response = self.client.get(url)
-    #         response.raise_for_status()
-    #         data = response.json()
-    #         messages = [GenieMessage(**msg) for msg in data.get("messages", [])]
-    #         logger.info(f"Retrieved {len(messages)} messages")
-    #         return messages
+        Returns:
+            GenieConversation object or None if failed
+        """
+        url = f"{self.base_url}/spaces/{space_id}/conversations/{conversation_id}"
 
-    #     except httpx.HTTPStatusError as e:
-    #         logger.error(f"HTTP error listing messages: {e.response.status_code} - {e.response.text}")
-    #         return []
-    #     except Exception as e:
-    #         logger.error(f"Error listing messages: {e}")
-    #         return []
+        try:
+            response = self.client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            return GenieConversation(**data)
 
-    # def get_conversation(self, space_id: str, conversation_id: str) -> GenieConversation | None:
-    #     """Get a Genie conversation.
-
-    #     Args:
-    #         space_id: Genie space ID
-    #         conversation_id: Conversation ID
-
-    #     Returns:
-    #         GenieConversation object or None if failed
-    #     """
-    #     url = f"{self.base_url}/spaces/{space_id}/conversations/{conversation_id}"
-
-    #     try:
-    #         response = self.client.get(url)
-    #         response.raise_for_status()
-    #         data = response.json()
-    #         return GenieConversation(**data)
-
-    #     except httpx.HTTPStatusError as e:
-    #         logger.error(f"HTTP error getting conversation: {e.response.status_code} - {e.response.text}")
-    #         return None
-    #     except Exception as e:
-    #         logger.error(f"Error getting conversation: {e}")
-    #         return None
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error getting conversation: {e.response.status_code} - {e.response.text}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting conversation: {e}")
+            return None
 
     def query_genie(self, space_id: str, query: str, conversation_id: str | None = None) -> dict[str, Any]:
         """Query Genie with automatic conversation management.
