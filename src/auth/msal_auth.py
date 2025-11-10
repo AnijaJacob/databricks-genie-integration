@@ -11,13 +11,7 @@ logger = logging.getLogger(__name__)
 class OBOAuth:
     """On-Behalf-Of (OBO) authentication flow for Databricks."""
 
-    def __init__(
-        self,
-        tenant_id: str,
-        client_id: str,
-        client_secret: str,
-        databricks_resource_id: str = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d",
-    ):
+    def __init__(self, tenant_id: str, client_id: str, client_secret: str, databricks_resource_id: str):
         """Initialize OBO authentication.
 
         Args:
@@ -47,7 +41,7 @@ class OBOAuth:
         Returns:
             Token response containing access_token or None if failed
         """
-        scopes = [f"{self.databricks_resource_id}/.default"]
+        scopes = [f"{self.databricks_resource_id}/user_impersonation"]
 
         try:
             result = self.app.acquire_token_on_behalf_of(
@@ -56,7 +50,7 @@ class OBOAuth:
             )
 
             if "access_token" in result:
-                logger.info("Successfully acquired OBO token")
+                logger.info("Successfully acquired OBO token", result)
                 return result
             else:
                 logger.error(f"Failed to acquire OBO token: {result.get('error_description')}")
@@ -70,13 +64,7 @@ class OBOAuth:
 class AppToAppAuth:
     """App-to-App (client credentials) authentication flow for Databricks."""
 
-    def __init__(
-        self,
-        tenant_id: str,
-        client_id: str,
-        client_secret: str,
-        databricks_resource_id: str = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d",
-    ):
+    def __init__(self, tenant_id: str, client_id: str, client_secret: str, databricks_resource_id: str):
         """Initialize App-to-App authentication.
 
         Args:

@@ -9,22 +9,23 @@ def create_swagger_ui_oauth_params(client_id: str) -> dict:
 
     Args:
         client_id: Azure AD client ID
+        databricks_resource_id: Databricks Azure resource ID
 
     Returns:
         Dictionary with OAuth parameters for Swagger UI
     """
     return {
+        # "clientId": client_id,
+        # "usePkceWithAuthorizationCodeGrant": True,
+        # "scopes": [f"api://{client_id}/access_as_user"],
         "clientId": client_id,
         "usePkceWithAuthorizationCodeGrant": True,
+        "useBasicAuthenticationWithAccessCodeGrant": True,
         "scopes": [f"{client_id}/.default"],
     }
 
 
-def set_azure_ad_openapi(
-    app: FastAPI,
-    client_id: str | None,
-    tenant_id: str | None,
-):
+def set_azure_ad_openapi(app: FastAPI, client_id: str | None, tenant_id: str | None, databricks_resource_id: str):
     """
     Configures OpenAPI schema with Azure AD authentication using authorization code flow with PKCE.
 
@@ -72,7 +73,8 @@ def set_azure_ad_openapi(
                             "authorizationUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize",
                             "tokenUrl": f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
                             "scopes": {
-                                f"{client_id}/.default": "Access API",
+                                # f"api://{client_id}/access_as_user": "Access API as user",
+                                f"{client_id}/.default": "Default scopes",
                             },
                         }
                     },

@@ -1,8 +1,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from src.auth.dependencies import get_access_token
 from src.auth.msal_auth import AppToAppAuth, OBOAuth
 from src.models.config import Config
 from src.routers.schema import QueryRequest
@@ -11,14 +11,13 @@ from src.services.genie_client import GenieClient
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-security = HTTPBearer()
 config = Config()
 
 
 @router.post("/query-obo")
 async def query_genie_obo(
-    request: QueryRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    query_request: QueryRequest,
+    access_token: str = Depends(get_access_token),
 ):
     """Query Genie using On-Behalf-Of (OBO) flow.
 
@@ -30,9 +29,7 @@ async def query_genie_obo(
         Query result from Genie
     """
     try:
-        # Get token from credentials
-        user_token = credentials.credentials
-
+        logger.debug(f"User token: {access_token[:20]}...")
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
             tenant_id=config.tenant_id,
@@ -41,7 +38,7 @@ async def query_genie_obo(
             databricks_resource_id=config.databricks_resource_id,
         )
 
-        token_result = obo_auth.acquire_token_on_behalf_of(user_token)
+        token_result = obo_auth.acquire_token_on_behalf_of(access_token)
         if not token_result or "access_token" not in token_result:
             raise HTTPException(status_code=401, detail="Failed to acquire Databricks token")
 
@@ -51,8 +48,8 @@ async def query_genie_obo(
         with GenieClient(config.genie_workspace_url, databricks_token) as genie:
             result = genie.query_genie(
                 space_id=config.genie_space_id,
-                query=request.query,
-                conversation_id=request.conversation_id,
+                query=query_request.query,
+                conversation_id=query_request.conversation_id,
             )
 
             if "error" in result:
@@ -115,7 +112,7 @@ async def query_genie_app(request: QueryRequest):
 @router.get("/conversation/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    access_token: str = Depends(get_access_token),
 ):
     """Get conversation details using OBO flow.
 
@@ -127,9 +124,6 @@ async def get_conversation(
         Conversation details
     """
     try:
-        # Get token from credentials
-        user_token = credentials.credentials
-
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
             tenant_id=config.tenant_id,
@@ -138,7 +132,7 @@ async def get_conversation(
             databricks_resource_id=config.databricks_resource_id,
         )
 
-        token_result = obo_auth.acquire_token_on_behalf_of(user_token)
+        token_result = obo_auth.acquire_token_on_behalf_of(access_token)
         if not token_result or "access_token" not in token_result:
             raise HTTPException(status_code=401, detail="Failed to acquire Databricks token")
 
@@ -163,7 +157,7 @@ async def get_conversation(
 @router.get("/conversation/{conversation_id}/messages")
 async def list_messages(
     conversation_id: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    access_token: str = Depends(get_access_token),
 ):
     """List messages in a conversation using OBO flow.
 
@@ -175,9 +169,6 @@ async def list_messages(
         List of messages
     """
     try:
-        # Get token from credentials
-        user_token = credentials.credentials
-
         # Acquire Databricks token using OBO
         obo_auth = OBOAuth(
             tenant_id=config.tenant_id,
@@ -186,7 +177,7 @@ async def list_messages(
             databricks_resource_id=config.databricks_resource_id,
         )
 
-        token_result = obo_auth.acquire_token_on_behalf_of(user_token)
+        token_result = obo_auth.acquire_token_on_behalf_of(access_token)
         if not token_result or "access_token" not in token_result:
             raise HTTPException(status_code=401, detail="Failed to acquire Databricks token")
 

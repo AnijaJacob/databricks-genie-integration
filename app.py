@@ -40,6 +40,7 @@ set_azure_ad_openapi(
     app=app,
     client_id=config.client_id,
     tenant_id=config.tenant_id,
+    databricks_resource_id=config.databricks_resource_id,
 )
 
 

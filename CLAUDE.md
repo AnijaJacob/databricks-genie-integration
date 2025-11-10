@@ -53,9 +53,11 @@ The project integrates with the following Genie Conversation API endpoints:
 
 ### Azure AD Integration
 - Uses Microsoft Entra ID (Azure AD) for authentication
-- Single app registration (`a36bace0-849e-46d9-82c5-ac4eda6a60ed`) for both API and Swagger UI
+- Single app registration (`c5122c31-6ad8-4783-ad40-63001d8fb632`) for both API and Swagger UI
 - Interactive browser-based authentication via Swagger UI with Authorization Code Flow + PKCE
-- Workspace-specific Databricks resource ID: `aa5bd296-7205-4063-93e5-e4ed0d9ca3e2`
+- **Global Databricks resource ID**: `2ff814a6-3304-4ab8-85cb-cd0e6f879c1d` (used for OBO token exchange)
+  - ⚠️ Must use global resource ID, not workspace-specific ID
+  - Global ID works across all Databricks workspaces and is required for Genie API
 - Required API permissions:
   - **Azure Databricks** - `user_impersonation` (Delegated) - Requires admin consent
   - **Microsoft Graph** - Pre-configured permissions
@@ -77,6 +79,108 @@ The project integrates with the following Genie Conversation API endpoints:
 - **No client secret**: Public client pattern suitable for browser-based authentication
 - **User consent**: Prompts proper consent flow for delegated permissions
 - **Standards compliant**: Recommended OAuth2 flow for SPAs and browser-based clients
+
+### Swagger OAuth Implementation Details
+
+#### PKCE Flow in Swagger UI
+Swagger UI implements Authorization Code Flow with PKCE (Proof Key for Code Exchange):
+1. **User clicks "Authorize"** → Swagger generates a random `code_verifier` and derives `code_challenge`
+2. **Browser redirects to Azure AD** with `code_challenge` in query parameters
+3. **User authenticates** → Azure AD issues authorization code
+4. **Azure AD redirects back** to `/docs/oauth2-redirect` with the authorization code
+5. **Swagger exchanges code for token** using `code_verifier` (proves it's the same client)
+6. **Token stored in browser memory** → Automatically added to all API requests
+
+#### Critical Configuration Requirements
+
+**Azure AD App Registration:**
+- **Redirect URI Platform Type**: MUST be "Single-page application (SPA)"
+  - ❌ **NOT "Web"** - Web platform expects server-side code exchange with client secret
+  - ✅ **"Single-page application"** - Allows browser-based PKCE code exchange without secret
+- **Redirect URI Format**: `http://localhost:{PORT}/docs/oauth2-redirect` (must exactly match)
+- **Implicit Grant**: Do NOT enable (we use authorization code flow, not implicit)
+- **Allow public client flows**: No (SPA uses PKCE, not public client flow)
+
+**OpenAPI Security Scheme Configuration:**
+```python
+"securitySchemes": {
+    "AzureOAuth": {
+        "type": "oauth2",
+        "flows": {
+            "authorizationCode": {  # Must be authorizationCode for PKCE
+                "authorizationUrl": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
+                "tokenUrl": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+                "scopes": {
+                    "{client_id}/.default": "Access API"
+                }
+            }
+        }
+    }
+}
+```
+
+**Swagger UI OAuth Initialization:**
+```python
+ui.initOAuth({
+    "clientId": "{client_id}",
+    "usePkceWithAuthorizationCodeGrant": True,  # Critical: Enables PKCE
+    "scopes": ["{client_id}/.default"]
+})
+```
+
+#### How Swagger Adds Authorization Headers
+
+**Automatic Header Injection:**
+- After successful OAuth authentication, Swagger UI stores the access token in browser memory
+- For EVERY subsequent API request, Swagger automatically adds: `Authorization: Bearer {token}`
+- This happens because of the **global security requirement** in OpenAPI schema:
+  ```python
+  "security": [{"AzureOAuth": []}]  # Applied to all endpoints
+  ```
+
+**Backend Token Extraction:**
+- Endpoints use dependency injection to extract token:
+  ```python
+  @router.post("/endpoint")
+  async def my_endpoint(
+      request_data: MySchema,
+      access_token: str = Depends(get_access_token),  # Token automatically extracted
+  ):
+      # access_token contains the user's token from Swagger OAuth
+  ```
+- Dependency function extracts from header:
+  ```python
+  def get_access_token(request: Request) -> str:
+      authorization = request.headers.get("authorization", "")
+      if authorization.startswith("Bearer "):
+          return authorization.split("Bearer ")[-1]
+      raise HTTPException(status_code=401, detail="Not authenticated")
+  ```
+
+**Key Insight**:
+- ❌ Do NOT use `HTTPBearer()` security from `fastapi.security` - creates separate security scheme
+- ✅ Use custom dependency that extracts from `Request.headers` - works with OAuth scheme
+
+#### Common Pitfalls
+
+1. **Cross-Origin Error (`window.opener` blocked)**:
+   - Cause: OAuth redirect opens in new tab instead of popup, or hardcoded redirect URL doesn't match
+   - Solution: Use `window.location.origin + '/docs/oauth2-redirect'` for dynamic redirect URL
+   - Workaround: Replace `127.0.0.1` with `localhost` in redirect URL (Azure AD only allows localhost for HTTP)
+
+2. **Authorization Header Not Sent**:
+   - Cause: Endpoint uses `HTTPBearer()` dependency instead of custom token extraction
+   - Solution: Remove `HTTPBearer()`, use `Depends(get_access_token)` with custom dependency
+
+3. **Wrong Redirect URI Platform**:
+   - Cause: Redirect URI configured as "Web" instead of "SPA"
+   - Effect: Azure AD expects server-side token exchange, Swagger can't complete PKCE flow
+   - Solution: Remove "Web" redirect URI, add as "Single-page application"
+
+4. **Token Audience Mismatch**:
+   - Cause: Requesting workspace-specific Databricks resource ID instead of global
+   - Error: `Expected aud claim to be: 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d`
+   - Solution: Use global Databricks resource ID (`2ff814a6-3304-4ab8-85cb-cd0e6f879c1d`) for OBO flow
 
 ### Why OBO Flow Over Direct Databricks Authentication?
 - **User context preservation**: Maintains user identity throughout the flow

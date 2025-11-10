@@ -15,9 +15,7 @@ class Config(BaseSettings):
     client_secret: str = Field(..., description="Azure AD client secret")
 
     # Databricks Configuration
-    databricks_resource_id: str = Field(
-        default="2ff814a6-3304-4ab8-85cb-cd0e6f879c1d", description="Databricks Azure resource ID"
-    )
+    databricks_resource_id: str = Field(description="Databricks Azure resource ID")
 
     # Genie Configuration
     genie_workspace_url: str = Field(

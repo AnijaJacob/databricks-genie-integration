@@ -12,6 +12,7 @@ swagger_ui_default_parameters = {
     "showExtensions": True,
     "showCommonExtensions": True,
     "displayRequestDuration": True,
+    "persistAuthorization": True,
 }
 
 
@@ -65,7 +66,7 @@ def get_swagger_ui_html(
         html += f"{json.dumps(key)}: {json.dumps(jsonable_encoder(value))},\n"
 
     if oauth2_redirect_url:
-        html += f'oauth2RedirectUrl: "http://localhost:8000{oauth2_redirect_url}",'
+        html += f"oauth2RedirectUrl: window.location.origin + '{oauth2_redirect_url}',"
 
     html += """
         dom_id: '#swagger-ui',
