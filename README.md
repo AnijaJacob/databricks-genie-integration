@@ -1,6 +1,6 @@
 # Databricks Genie Integration
 
-FastAPI-based integration with Azure Databricks Genie Conversation API, supporting both On-Behalf-Of (OBO) and App-to-App authentication flows.
+FastAPI-based integration with Azure Databricks Genie Conversation API, supporting  On-Behalf-Of (OBO) , OAuth App-to-App , PAT authentication flows.
 
 ## Prerequisites:
 

@@ -51,7 +51,6 @@ async def query_genie_obo(
             result = genie.query_genie(
                 space_id=config.genie_space_id,
                 query=query_request.query,
-                conversation_id=query_request.conversation_id,
             )
 
             if "error" in result:
