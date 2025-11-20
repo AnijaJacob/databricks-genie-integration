@@ -6,6 +6,8 @@ from typing import Any
 import httpx
 
 from src.models.genie import CreateMessageRequest, GenieConversation, GenieMessage
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.errors import DatabricksError
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ class GenieClient:
             "Content-Type": "application/json",
         }
         self.client = httpx.Client(headers=self.headers, timeout=30.0)
+        self.workspace_client = WorkspaceClient(host=workspace_url, token=access_token)
 
     def __enter__(self):
         """Context manager entry."""
@@ -180,3 +183,64 @@ class GenieClient:
             "query_result": message.query_result,
             "attachments": message.attachments,
         }
+
+    def get_query_result_attachment(self, space_id: str, conversation_id: str, message_id: str, attachment_id: str) -> dict[str, Any] | None:
+        """Get a query result attachment from a Genie message.
+        GET /api/2.0/genie/spaces/{space_id}/conversations/{conversation_id}/messages/{message_id}/query-result/{attachment_id}
+        
+        Args:
+            space_id: Genie space ID
+            conversation_id: Conversation ID
+            message_id: Message ID
+            attachment_id: Attachment ID
+
+        Returns:
+            Attachment data or None if failed
+        """
+        url = f"{self.base_url}/spaces/{space_id}/conversations/{conversation_id}/messages/{message_id}/query-result/{attachment_id}"
+
+
+        try:
+            response = self.client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(data)
+            logger.info(f"Retrieved query result attachment: {attachment_id}")
+            return data
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error getting query result attachment: {e.response.status_code} - {e.response.text}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting query result attachment: {e}")
+            return None
+        
+    def start_conversation_and_wait(self, space_id, question):
+        """Ask Genie and wait for its message to complete."""
+        logger.info(f"Asking Genie: {question!r}\n")
+
+        try:
+            conv = self.workspace_client.genie.start_conversation_and_wait(space_id=space_id,  content= question)
+        except DatabricksError as e:
+            raise RuntimeError(f"Failed to start conversation: {e}")
+        logger.info(" Conversation started, waiting for response...")
+
+        try:
+            response = self.workspace_client.genie.create_message_and_wait(space_id=space_id, conversation_id= conv.conversation_id, content= question)
+            if str(response.status) == 'MessageStatus.COMPLETED':
+                return conv.conversation_id, conv.message_id, conv.attachments[0].attachment_id, response.attachments[0].text.content
+        except DatabricksError as e:
+            raise RuntimeError(f"Failed to get message: {e}")
+        
+    def fetch_attachment_results(self, space_id, conversation_id, message_id, attachment_id):
+        """Fetch SQL attachment results (if any)."""
+        try:
+            qr = self.workspace_client.genie.get_message_attachment_query_result(
+                    space_id=space_id,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    attachment_id=attachment_id
+                )
+            return qr
+        except:
+                pass

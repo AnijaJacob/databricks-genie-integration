@@ -1,6 +1,7 @@
 """FastAPI application for Databricks Genie integration."""
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
@@ -10,6 +11,9 @@ from src.models.config import Config
 from src.routers import genie
 from src.swagger.routing.openapi import create_swagger_ui_oauth_params, set_azure_ad_openapi
 from src.swagger.routing.swagger_ui import get_swagger_ui_html
+
+# Create logs directory if it doesn't exist
+Path("logs").mkdir(exist_ok=True)
 
 # Configure logging
 logging.basicConfig(

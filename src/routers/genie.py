@@ -219,3 +219,93 @@ async def get_message(
     except Exception as e:
         logger.error(f"Error listing messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/conversation/{conversation_id}/messages/{message_id}/query-result/{attachment_id}")
+async def get_query_result_attachment(
+    conversation_id: str,
+    message_id: str,
+    attachment_id: str,
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
+):
+    """Get a query result attachment from a Genie message.
+
+    Args:
+        conversation_id: Conversation ID
+        message_id: Message ID
+        attachment_id: Attachment ID
+        credentials: Databricks PAT token
+
+    Returns:
+        Query result attachment data
+    """
+    try:
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Missing Authorization header with PAT token")
+
+        databricks_token = credentials.credentials
+
+        # Get query result attachment
+        with GenieClient(config.genie_workspace_url, databricks_token) as genie:
+            attachment = genie.get_query_result_attachment(
+                config.genie_space_id, conversation_id, message_id, attachment_id
+            )
+            
+            if not attachment:
+                raise HTTPException(status_code=404, detail="Query result attachment not found")
+            
+            return attachment
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting query result attachment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/new-conversation-sdk/pat")
+async def query_genie_pat(
+    query_request: QueryRequest,
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
+):
+    """Query Genie using PAT flow.
+
+    Args:
+        request: Query request containing query text and optional conversation_id
+        credentials: Databricks PAT token
+
+    Returns:
+        Query result from Genie
+    """
+    try:
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Missing Authorization header with PAT token")
+
+        databricks_token = credentials.credentials
+        # Query Genie
+        with GenieClient(config.genie_workspace_url, databricks_token) as genie:
+            conv_id, message_id, attachment_id, answer = genie.start_conversation_and_wait(
+                space_id=config.genie_space_id,
+                question=query_request.query,
+            )
+
+            query_results = genie.fetch_attachment_results(
+                space_id=config.genie_space_id,
+                conversation_id=conv_id,
+                message_id=message_id,
+                attachment_id=attachment_id,
+            )
+            response = {
+                    "conversation_id": conv_id,
+                    "message_id": message_id,
+                    "attachment_id": attachment_id,
+                    "answer": answer,
+                    "query_results": query_results.as_dict() if query_results else None,
+                }
+                
+            return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in OBO query: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
